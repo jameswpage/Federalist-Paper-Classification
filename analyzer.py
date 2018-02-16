@@ -15,6 +15,8 @@ import nltk
 import random
 import word_counter as wc
 import string
+nltk.download('stopwords')
+from nltk.corpus import stopwords
 
 #create a dict of authors:papers
 key_dict = {}
@@ -43,7 +45,13 @@ random.shuffle(documents)
 #find most common words of entire docuement set
 counter = wc.Counter()
 total_word_freq = counter.getNlargest()
-doc_words = set([item[0] for item in total_word_freq])
+
+#remove stop words:
+doc_words = set([])
+for word in total_word_freq:
+    if word[0] not in set(stopwords.words('english')):
+        doc_words.add(word[0])
+#doc_words = set([item[0] for item in total_word_freq])
 
 
 def getDocWordSet(doc):
@@ -54,14 +62,31 @@ def getDocWordSet(doc):
         word = word.translate(str.maketrans('','', string.punctuation))
         word_set.add(word)
     return word_set
-    
+
+def getDocWordFreq(doc):
+    word_freq = {}
+    word_list = doc.split(None)
+    for word in word_list:
+        word = word.lower()
+        word = word.translate(str.maketrans('','', string.punctuation))
+        if word in word_freq:
+            word_freq[word] += 1
+        else:
+            word_freq[word] = 1
+            
+    return word_freq, len(word_list)
 
 #document is a string, not a tuble (doesn't have classification)
 def document_features(document):
     document_words = getDocWordSet(document)
+    doc_word_freq, total = getDocWordFreq(document)
     features = {}
     for word in doc_words:
-        features['contains({})'.format(word)] = (word in document_words)
+        if word in doc_word_freq:
+            features["Freq({})".format(word)] = (doc_word_freq[word]/total)
+        else:
+            features["Freq({})".format(word)] = 0 
+        #features['contains({})'.format(word)] = (word in document_words)
     return features
 
 
