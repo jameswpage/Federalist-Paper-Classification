@@ -26,11 +26,13 @@ from nltk.corpus import stopwords
 
 #this class is the preprocessor which makes document objects for all classifiers to use
 class PreProcessor():
-    def __init__(self, NB = False, SVM = False):
+    #ratio is the ratio of train data / test dev data. NB means to prepare info for
+    #Naive Bayes and SVM means to prepare for support vector machines
+    def __init__(self, ratio = 2/3, NB = False, SVM = False):
         self.key_dict = self.create_key()
         self.documents, self.unknown = self.create_doc_list()
         if SVM:
-            self.SVM_data = self.separate_docs(self.documents)
+            self.SVM_data = self.separate_docs(self.documents, ratio)
     
     def create_key(self):
         #create a dict of authors:papers
@@ -57,7 +59,7 @@ class PreProcessor():
             if name == 'Unknown':
                 for num in self.key_dict[name]:
                     with open('./Documents/Doc_No_'+num+'.txt', 'r') as doc:
-                        unknown.append((doc.read(), name))
+                        unknown.append((doc.read(), num))
         random.shuffle(documents)
         return documents, unknown
     
@@ -71,10 +73,10 @@ class PreProcessor():
     
     #decide what percentage of classified papers will be used to train, remaining
     #papers are used to test the classifier performance
-    def separate_docs(self, docs):
+    def separate_docs(self, docs, ratio = 2/3):
         #decide what percentage of classified papers will be used to train, remaining
         #papers are used to test the classifier performance
-        train_ratio = 2/3
+        train_ratio = ratio
         ham_train_amount = int(len(self.key_dict['Hamilton']) * train_ratio)
         mad_train_amount = int(len(self.key_dict['Madison']) * train_ratio)
         jay_train_amount = int(len(self.key_dict['Jay']) * train_ratio)
@@ -177,7 +179,7 @@ class NBClass:
         return total_word_freq, doc_words
         
     def divideDocs(self, documents):
-        train_ratio = 2/3
+        train_ratio = 3/4
         ham_train_amount = int(len(self.pp.key_dict['Hamilton']) * train_ratio)
         mad_train_amount = int(len(self.pp.key_dict['Madison']) * train_ratio)
         jay_train_amount = int(len(self.pp.key_dict['Jay']) * train_ratio)
@@ -236,7 +238,6 @@ class NBClass:
         for doc in self.new_test:
             print(classifier.classify(self.document_features(doc[0])), doc[1])
 
-#runNBClassifier()
 
 
 #********************************************************************************************
@@ -247,36 +248,121 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.pipeline import Pipeline
+from operator import itemgetter
 
-#count_vect = CountVectorizer()
-#X_train_counts = count_vect.fit_transform(SVM_data['Train']['Docs'])
-
-
-#tfidf_transformer = TfidfTransformer()
-#X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
 
 class SVMClass:
-    def __init__(self):
-        self.pp = PreProcessor(SVM = True)
+    def __init__(self, ratio = 2/3):
+        self.pp = PreProcessor(ratio, SVM = True)
 
     def runClassifier(self):
+        sw = stopwords.words('english')[26:]
+        #sw= 'english'
         svm_model = Pipeline([
-                    ('vect', CountVectorizer()),
+                    ('vectorizer', CountVectorizer(stop_words=sw)),
                     ('tfidf', TfidfTransformer()),
-                    ('classifier', SGDClassifier()),])
+                    ('classifier', SGDClassifier(loss = 'hinge', max_iter = 100)),])
+    
             
         svm_model.fit(self.pp.SVM_data['Train']['Docs'],self.pp.SVM_data['Train']['Authors'])
         
         predicted_svm = svm_model.predict(self.pp.SVM_data['Test']['Docs'])
-        print(np.mean(predicted_svm == self.pp.SVM_data['Test']['Authors']))
+        #print(np.mean(predicted_svm == self.pp.SVM_data['Test']['Authors']))
+        #print(self.show_most_informative_features(svm_model))
+        print('Actual:\t\t\tPredicted')
+        for i in range(len(predicted_svm)):
+            print(self.pp.SVM_data['Test']['Authors'][i] + '\t\t\t' + predicted_svm[i])
+            
+        print('\nDisputed Papers:')
+        for doc in self.pp.unknown:
+            print(svm_model.predict([doc[0]])[0] + '\t\t\t' + str(doc[1]))
+            
+            
+            
+        
+        
+    #method for showing most significant features
+    #based off of https://bbengfort.github.io/tutorials/2016/05/19/text-classification-nltk-sckit-learn.html
+    def show_most_informative_features(self, model, text=None, n=20):
+        # Extract the vectorizer and the classifier from the pipeline
+        vectorizer = model.named_steps['vectorizer']
+        classifier = model.named_steps['classifier']
+    
+        # Check to make sure that we can perform this computation
+        if not hasattr(classifier, 'coef_'):
+            raise TypeError(
+                "Cannot compute most informative features on {}.".format(
+                    classifier.__class__.__name__
+                )
+            )
+    
+        if text is not None:
+            # Compute the coefficients for the text
+            tvec = model.transform([text]).toarray()
+        else:
+            # Otherwise simply use the coefficients
+            tvec = classifier.coef_
+        
+    
+        print(classifier.classes_)
+        # Zip the feature names with the coefs and sort
+        coefs = sorted(
+            zip(tvec[0], vectorizer.get_feature_names()),
+            key=itemgetter(0), reverse=True
+        )
+    
+        # Get the top n and bottom n coef, name pairs
+        topn  = zip(coefs[:n], coefs[:-(n+1):-1])
+    
+        # Create the output string to return
+        output = []
+    
+        # If text, add the predicted value to the output.
+        if text is not None:
+            output.append("\"{}\"".format(text))
+            output.append(
+                "Classified as: {}".format(model.predict([text]))
+            )
+            output.append("")
+    
+        # Create two columns with most negative and most positive features.
+        for (cp, fnp), (cn, fnn) in topn:
+            output.append(
+                "{:0.4f}{: >15}    {:0.4f}{: >15}".format(
+                    cp, fnp, cn, fnn
+                )
+            )
+    
+        return "\n".join(output)
 
+
+#import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
-    #svm = SVMClass()
-    #svm.runClassifier()
+    svm = SVMClass(.95)
+    svm.runClassifier()
     
-    NB = NBClass()
-    NB.runNBClassifier()
+    
+# ===================CODE FOR FINDING OPTIMAL TRAIN/TEST RATIO=================
+#     
+#     x = []
+#     y = []
+#     for j in np.arange(.5, .9, .02):
+#         x.append(j)
+#         ave_acc = 0
+#         for i in range(50):
+#             svm = SVMClass(j)
+#             ave_acc += svm.runClassifier()
+#         y.append(ave_acc/100)
+#         
+#     plt.plot(x, y)
+#     plt.show()
+# =============================================================================
+    
+        
+    
+    #NB = NBClass()
+    #NB.runNBClassifier()
 
 
 
