@@ -52,7 +52,7 @@ class PreProcessor():
         documents = []
         unknown = []
         for name in self.key_dict:
-            if name != 'Unknown' and name != 'Hamilton and Madison':
+            if name != 'Unknown' and name != 'Hamilton and Madison' and name != 'Jay':
                 for num in self.key_dict[name]:
                     with open('./Documents/Doc_No_'+num+'.txt', 'r') as doc:
                         documents.append((doc.read(), name))
@@ -254,10 +254,12 @@ from operator import itemgetter
 class SVMClass:
     def __init__(self, ratio = 2/3):
         self.pp = PreProcessor(ratio, SVM = True)
+        self.ratio = ratio
 
     def runClassifier(self):
         sw = stopwords.words('english')[26:]
         #sw= 'english'
+        #token_pattern=r"(?u)\b\w\w+\b|!|\?|\"|\'"
         svm_model = Pipeline([
                     ('vectorizer', CountVectorizer(stop_words=sw)),
                     ('tfidf', TfidfTransformer()),
@@ -266,12 +268,13 @@ class SVMClass:
             
         svm_model.fit(self.pp.SVM_data['Train']['Docs'],self.pp.SVM_data['Train']['Authors'])
         
-        predicted_svm = svm_model.predict(self.pp.SVM_data['Test']['Docs'])
-        #print(np.mean(predicted_svm == self.pp.SVM_data['Test']['Authors']))
-        #print(self.show_most_informative_features(svm_model))
-        print('Actual:\t\t\tPredicted')
-        for i in range(len(predicted_svm)):
-            print(self.pp.SVM_data['Test']['Authors'][i] + '\t\t\t' + predicted_svm[i])
+        if self.ratio != 1:
+            predicted_svm = svm_model.predict(self.pp.SVM_data['Test']['Docs'])
+            print(np.mean(predicted_svm == self.pp.SVM_data['Test']['Authors']))
+            print(self.show_most_informative_features(svm_model))
+            print('Actual:\t\t\tPredicted')
+            for i in range(len(predicted_svm)):
+                print(self.pp.SVM_data['Test']['Authors'][i] + '\t\t\t' + predicted_svm[i])
             
         print('\nDisputed Papers:')
         for doc in self.pp.unknown:
