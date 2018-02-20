@@ -31,6 +31,7 @@ class PreProcessor():
     def __init__(self, ratio = 2/3, NB = False, SVM = False):
         self.key_dict = self.create_key()
         self.documents, self.unknown = self.create_doc_list()
+        self.total_word_freq, self.total_word_set, self.totalcount = self.analyzeCorpus()
         if SVM:
             self.SVM_data = self.separate_docs(self.documents, ratio)
     
@@ -62,6 +63,22 @@ class PreProcessor():
                         unknown.append((doc.read(), num))
         random.shuffle(documents)
         return documents, unknown
+    
+    def analyzeCorpus(self):
+        #getting total document set qualities
+        counter = wc.Counter()
+        total_word_freq = counter.getNlargest()
+        count = 0
+        #remove stop words:
+        doc_words = set([])
+        for word in total_word_freq:
+            #the first 26 words in the stoplist are pronouns which could be invaluable in 
+            #determining the author 
+            count += word[1]
+            if word[0] not in set(stopwords.words('english')[26:]):
+                doc_words.add(word[0])
+                
+        return total_word_freq, doc_words, count
     
 
     #*********************************************************************************
@@ -158,7 +175,7 @@ def getDocWordFreq(doc):
 class NBClass:
     def __init__(self):
         self.pp = PreProcessor()
-        self.total_word_freq, self.total_word_set = self.analyzeCorpus()
+        self.total_word_freq, self.total_word_set, self.totalcount = self.analyzeCorpus()
         self.train_set, self.test_set, self.new_test = self.divideDocs(self.pp.documents)
         
     
@@ -168,15 +185,29 @@ class NBClass:
         #getting total document set qualities
         counter = wc.Counter()
         total_word_freq = counter.getNlargest()
+        count = 0
         #remove stop words:
         doc_words = set([])
         for word in total_word_freq:
             #the first 26 words in the stoplist are pronouns which could be invaluable in 
             #determining the author 
+            count += word[1]
             if word[0] not in set(stopwords.words('english')[26:]):
                 doc_words.add(word[0])
                 
-        return total_word_freq, doc_words
+        return total_word_freq, doc_words, count
+    
+    #term frequency inforse document frequency
+    def tfidf(self, document):
+        #document_words = getDocWordSet(document)
+        doc_word_freq, total = getDocWordFreq(document)
+        tfidf = [0] * len(doc_word_freq)
+        
+        for word, freq in doc_word_freq:
+            if word in self.total_word_freq:
+                print(s)
+                
+        
         
     def divideDocs(self, documents):
         train_ratio = 3/4
@@ -229,14 +260,59 @@ class NBClass:
             features['contains({})'.format(word)] = (word in document_words)
         return features
     
+    def new_features(self, features, document):
+        '''this method creates a new featureset that is limited to just the best
+        features as determined by a previous pass'''
+        document_words = getDocWordSet(document)
+        doc_word_freq, total = getDocWordFreq(document)
+        features = {}
+        for word in self.total_word_set:
+            needed = "Freq({})".format(word)
+            if word in doc_word_freq and needed in features:
+                features["Freq({}) > {}".format(word, features[needed])] = ((doc_word_freq[word]/total) > features[needed])
+            else:
+                features["Freq({})".format(word)] = 0 
+            
+            newneeded = "contains({})".format(word)
+            if newneeded in features:
+                features['contains({})'.format(word)] = (word in document_words)
+        return features
+    
     #this is a main function to run a NB classifier using the above as a feature set
     def runNBClassifier(self):
+        print('Running Naive Bayes...')
         classifier = nltk.NaiveBayesClassifier.train(self.train_set)
         
         print(nltk.classify.accuracy(classifier, self.test_set))
-        classifier.show_most_informative_features(5)
+        classifier.show_most_informative_features()
+        
+        
+        
+        #*****************************************************************
+        
+        #best_features = (self.get_most_informative_features(classifier))
+        
+        #create new classifier with limited features
+        #new_classifier = nltk.NaiveBayesClassifier.train(self.train_set)
+        
+        
         for doc in self.new_test:
             print(classifier.classify(self.document_features(doc[0])), doc[1])
+            
+            
+    
+    def get_most_informative_features(self, classifier):
+        '''Tweaking on function provided by nltk to print out more classifiers'''
+        # Determine the most relevant features, and display them.
+        final_dict = {}
+
+        for (fname, fval) in classifier.most_informative_features():
+            nn = fname.split()
+            if nn[0] not in final_dict:
+                final_dict[nn[0]] = nn[-1]
+                    
+        return final_dict
+
 
 
 
@@ -257,11 +333,12 @@ class SVMClass:
         self.ratio = ratio
 
     def runClassifier(self):
+        print('Running Stochastic Variant Descent...')
         sw = stopwords.words('english')[26:]
         #sw= 'english'
-        #token_pattern=r"(?u)\b\w\w+\b|!|\?|\"|\'"
+        tp = r"(?u)\b\w\w+\b|!|\?|\"|\'"
         svm_model = Pipeline([
-                    ('vectorizer', CountVectorizer(stop_words=sw)),
+                    ('vectorizer', CountVectorizer(stop_words=sw, token_pattern = tp)),
                     ('tfidf', TfidfTransformer()),
                     ('classifier', SGDClassifier(loss = 'hinge', max_iter = 100)),])
     
@@ -281,7 +358,14 @@ class SVMClass:
             print(svm_model.predict([doc[0]])[0] + '\t\t\t' + str(doc[1]))
             
             
-            
+    def tfidf(self, document):
+        #document_words = getDocWordSet(document)
+        doc_word_freq, total = getDocWordFreq(document)
+        tfidf = [0] * len(doc_word_freq)
+        
+        for word, freq in doc_word_freq:
+            if word in self.total_word_freq:
+                print(s)
         
         
     #method for showing most significant features
@@ -337,6 +421,10 @@ class SVMClass:
             )
     
         return "\n".join(output)
+    
+    
+    def showPlot(self, word):
+        
 
 
 #import matplotlib.pyplot as plt
@@ -344,6 +432,10 @@ class SVMClass:
 if __name__ == '__main__':
     svm = SVMClass(.95)
     svm.runClassifier()
+    
+    #nb = NBClass()
+    #nb.runNBClassifier()
+    
     
     
 # ===================CODE FOR FINDING OPTIMAL TRAIN/TEST RATIO=================
