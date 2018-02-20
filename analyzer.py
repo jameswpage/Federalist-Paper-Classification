@@ -16,6 +16,7 @@ import random
 import numpy as np
 import word_counter as wc
 import string
+import matplotlib.pyplot as plt
 
 from nltk.corpus import stopwords
 
@@ -71,14 +72,16 @@ class PreProcessor():
         count = 0
         #remove stop words:
         doc_words = set([])
+        total_word_freq_dict = {}
         for word in total_word_freq:
             #the first 26 words in the stoplist are pronouns which could be invaluable in 
             #determining the author 
             count += word[1]
             if word[0] not in set(stopwords.words('english')[26:]):
+                total_word_freq_dict[word[0]] = word[1]
                 doc_words.add(word[0])
                 
-        return total_word_freq, doc_words, count
+        return total_word_freq_dict, doc_words, count
     
 
     #*********************************************************************************
@@ -197,16 +200,7 @@ class NBClass:
                 
         return total_word_freq, doc_words, count
     
-    #term frequency inforse document frequency
-    def tfidf(self, document):
-        #document_words = getDocWordSet(document)
-        doc_word_freq, total = getDocWordFreq(document)
-        tfidf = [0] * len(doc_word_freq)
-        
-        for word, freq in doc_word_freq:
-            if word in self.total_word_freq:
-                print(s)
-                
+
         
         
     def divideDocs(self, documents):
@@ -357,20 +351,57 @@ class SVMClass:
         for doc in self.pp.unknown:
             print(svm_model.predict([doc[0]])[0] + '\t\t\t' + str(doc[1]))
             
+        
+        self.showPlot()
+        
+        (self.tfidf(self.pp.documents[0][0]))
+    
+    def showPlot(self):
+        
+        tfidf_values = []
+        for doc in self.pp.documents:
+            tfidf_values.append((doc[1], self.tfidf(doc[0])))
+        
+        
+        toplot = []
+
+        for name, tfidf in tfidf_values:
+            toappend = [name, 0, 0, 0, 'blue']
+            if name == 'Hamilton':
+                toappend[4] = 'red'
+            if 'powers' in tfidf:
+                toappend[1] = tfidf['powers']
+            if 'upon' in tfidf:
+                toappend[2] = tfidf['upon']
+            if 'courts' in tfidf:
+                toappend[3] = tfidf['courts']
+            toplot.append(toappend)
+        
+
+        toplot = np.array(toplot)
+        plt.scatter(toplot[:,2], toplot[:,1], c = toplot[:,4])
+        plt.xlabel('upon')
+        plt.ylabel('powers')
+        plt.show()
+        
             
     def tfidf(self, document):
         #document_words = getDocWordSet(document)
         doc_word_freq, total = getDocWordFreq(document)
-        tfidf = [0] * len(doc_word_freq)
+        tfidf = {}
         
-        for word, freq in doc_word_freq:
-            if word in self.total_word_freq:
-                print(s)
+        
+        for word in doc_word_freq:
+            if word in self.pp.total_word_freq:
+                tfidf[word] = (doc_word_freq[word]/total*self.pp.totalcount/self.pp.total_word_freq[word])
+                
+        return tfidf
         
         
     #method for showing most significant features
     #based off of https://bbengfort.github.io/tutorials/2016/05/19/text-classification-nltk-sckit-learn.html
     def show_most_informative_features(self, model, text=None, n=20):
+        
         # Extract the vectorizer and the classifier from the pipeline
         vectorizer = model.named_steps['vectorizer']
         classifier = model.named_steps['classifier']
@@ -422,8 +453,6 @@ class SVMClass:
     
         return "\n".join(output)
     
-    
-    def showPlot(self, word):
         
 
 
